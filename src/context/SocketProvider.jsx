@@ -9,10 +9,12 @@ export const useSocket = () => {
 };
 
 export const SocketProvider = (props) => {
-  const socket = useMemo(() => io("http://13.202.255.34:9000",{
-    withCredentials: true, 
+  const socket = useMemo(() => io("wss://13.202.255.34:9000", {
+    withCredentials: true,
     transports: ["websocket", "polling"],
+    rejectUnauthorized: false,  
   }), []);
+
 
   return (
     <SocketContext.Provider value={socket}>
