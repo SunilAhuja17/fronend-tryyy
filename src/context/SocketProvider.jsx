@@ -9,7 +9,7 @@ export const useSocket = () => {
 };
 
 export const SocketProvider = (props) => {
-  const socket = useMemo(() => io("wss://13.202.255.34", {
+  const socket = useMemo(() => io("wss://rtc.thedelvierypointe.com", {
     withCredentials: true,
     transports: ["websocket", "polling"],
     rejectUnauthorized: false,  
