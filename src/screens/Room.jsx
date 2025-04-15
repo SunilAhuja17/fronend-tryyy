@@ -136,15 +136,15 @@ const RoomPage = () => {
         )}
       </div>
 
-      <div className="flex gap-6 mt-8">
+      <div className="flex flex-col sm:flex-row gap-6 mt-8">
         {myStream && (
-          <div className="bg-gray-700 p-4 rounded-lg shadow-lg">
+          <div className="bg-gray-700 p-4 rounded-lg shadow-lg flex-1">
             <h2 className="text-lg font-semibold text-center mb-2">📹 My Stream</h2>
             <ReactPlayer
               playing
               muted
-              width="250px"
-              height="150px"
+              width="100%"
+              height="auto"
               url={myStream}
               className="rounded-lg overflow-hidden"
             />
@@ -152,12 +152,12 @@ const RoomPage = () => {
         )}
 
         {remoteStream && (
-          <div className="bg-gray-700 p-4 rounded-lg shadow-lg">
+          <div className="bg-gray-700 p-4 rounded-lg shadow-lg flex-1">
             <h2 className="text-lg font-semibold text-center mb-2">🧑‍🤝‍🧑 Remote Stream</h2>
             <ReactPlayer
               playing
-              width="250px"
-              height="150px"
+              width="100%"
+              height="auto"
               url={remoteStream}
               className="rounded-lg overflow-hidden"
             />
