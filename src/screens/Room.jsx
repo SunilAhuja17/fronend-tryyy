@@ -110,8 +110,8 @@ const RoomPage = () => {
   ]);
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
-      <div className="p-6 bg-gray-800 rounded-lg shadow-lg w-96 text-center">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
+      <div className="p-6 bg-gray-800 rounded-lg shadow-lg w-80 text-center">
         <h1 className="text-3xl font-bold mb-4">🔗 Room</h1>
         <h4 className={`text-lg mb-4 ${remoteSocketId ? "text-green-400" : "text-red-400"}`}>
           {remoteSocketId ? "✅ Connected" : "❌ No one in room"}
@@ -136,31 +136,36 @@ const RoomPage = () => {
         )}
       </div>
 
-      <div className="flex gap-6 mt-8">
+      {/* Video Section */}
+      <div className="flex flex-col md:flex-row gap-6 mt-8 items-center md:items-start">
         {myStream && (
-          <div className="bg-gray-700 p-4 rounded-lg shadow-lg">
+          <div className="bg-gray-700 p-4 rounded-lg shadow-lg w-[200px] h-[150px] md:w-[300px] md:h-[200px]">
             <h2 className="text-lg font-semibold text-center mb-2">📹 My Stream</h2>
-            <ReactPlayer
-              playing
-              muted
-              width="250px"
-              height="150px"
-              url={myStream}
-              className="rounded-lg overflow-hidden"
-            />
+            <div className="w-full h-full overflow-hidden rounded-md">
+              <ReactPlayer
+                playing
+                muted
+                url={myStream}
+                width="100%"
+                height="100%"
+                style={{ objectFit: "cover" }}
+              />
+            </div>
           </div>
         )}
 
         {remoteStream && (
-          <div className="bg-gray-700 p-4 rounded-lg shadow-lg">
+          <div className="bg-gray-700 p-4 rounded-lg shadow-lg w-[200px] h-[150px] md:w-[300px] md:h-[200px]">
             <h2 className="text-lg font-semibold text-center mb-2">🧑‍🤝‍🧑 Remote Stream</h2>
-            <ReactPlayer
-              playing
-              width="250px"
-              height="150px"
-              url={remoteStream}
-              className="rounded-lg overflow-hidden"
-            />
+            <div className="w-full h-full overflow-hidden rounded-md">
+              <ReactPlayer
+                playing
+                url={remoteStream}
+                width="100%"
+                height="100%"
+                style={{ objectFit: "cover" }}
+              />
+            </div>
           </div>
         )}
       </div>
