@@ -1,32 +1,24 @@
-import React, { useEffect, useCallback, useState, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { io } from "socket.io-client";
 import { useSocket } from "../context/SocketProvider";
-import peer from "../service/peer";
 
 const RoomPage = () => {
   const socket = useSocket();
   const [remoteSocketId, setRemoteSocketId] = useState(null);
-  const [myStream, setMyStream] = useState();
-  const [remoteStream, setRemoteStream] = useState();
-
+  const [myStream, setMyStream] = useState(null);
+  const [remoteStream, setRemoteStream] = useState(null);
   const myVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+
+  const peer = useRef(
+    new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    })
+  ).current;
 
   const handleUserJoined = useCallback(({ email, id }) => {
     setRemoteSocketId(id);
   }, []);
-
-  const handleCallUser = useCallback(async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true,
-    });
-    setMyStream(stream);
-    if (myVideoRef.current) {
-      myVideoRef.current.srcObject = stream;
-    }
-    const offer = await peer.getOffer();
-    socket.emit("user:call", { to: remoteSocketId, offer });
-  }, [remoteSocketId, socket]);
 
   const handleIncommingCall = useCallback(
     async ({ from, offer }) => {
@@ -39,125 +31,109 @@ const RoomPage = () => {
       if (myVideoRef.current) {
         myVideoRef.current.srcObject = stream;
       }
-      const ans = await peer.getAnswer(offer);
+
+      stream.getTracks().forEach((track) => {
+        peer.addTrack(track, stream);
+      });
+
+      const ans = await peer.createAnswer(offer);
+      await peer.setLocalDescription(ans);
       socket.emit("call:accepted", { to: from, ans });
     },
-    [socket]
+    [socket, peer]
   );
-
-  const sendStreams = useCallback(() => {
-    if (myStream) {
-      myStream.getTracks().forEach((track) => {
-        peer.peer.addTrack(track, myStream);
-      });
-    }
-  }, [myStream]);
 
   const handleCallAccepted = useCallback(
-    ({ from, ans }) => {
-      peer.setLocalDescription(ans);
-      sendStreams();
+    async ({ ans }) => {
+      await peer.setRemoteDescription(new RTCSessionDescription(ans));
     },
-    [sendStreams]
+    [peer]
   );
 
-  const handleNegoNeeded = useCallback(async () => {
-    const offer = await peer.getOffer();
-    socket.emit("peer:nego:needed", { offer, to: remoteSocketId });
-  }, [remoteSocketId, socket]);
-
-  const handleNegoNeedIncomming = useCallback(
-    async ({ from, offer }) => {
-      const ans = await peer.getAnswer(offer);
-      socket.emit("peer:nego:done", { to: from, ans });
-    },
-    [socket]
-  );
-
-  const handleNegoNeedFinal = useCallback(async ({ ans }) => {
-    await peer.setLocalDescription(ans);
-  }, []);
+  const handleNegotiationNeeded = useCallback(async () => {
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+    socket.emit("user:call", { to: remoteSocketId, offer });
+  }, [peer, remoteSocketId, socket]);
 
   useEffect(() => {
-    peer.peer.addEventListener("track", async (ev) => {
-      const remoteStream = ev.streams[0];
+    peer.onnegotiationneeded = handleNegotiationNeeded;
+  }, [handleNegotiationNeeded, peer]);
+
+  useEffect(() => {
+    peer.ontrack = (event) => {
+      const remoteStream = event.streams[0];
       setRemoteStream(remoteStream);
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
       }
+    };
+  }, [peer]);
+
+  const handleCallUser = useCallback(async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: true,
     });
-  }, []);
+    setMyStream(stream);
+    if (myVideoRef.current) {
+      myVideoRef.current.srcObject = stream;
+    }
+
+    stream.getTracks().forEach((track) => {
+      peer.addTrack(track, stream);
+    });
+
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+    socket.emit("user:call", { to: remoteSocketId, offer });
+  }, [remoteSocketId, socket]);
 
   useEffect(() => {
     socket.on("user:joined", handleUserJoined);
     socket.on("incomming:call", handleIncommingCall);
     socket.on("call:accepted", handleCallAccepted);
-    socket.on("peer:nego:needed", handleNegoNeedIncomming);
-    socket.on("peer:nego:final", handleNegoNeedFinal);
 
     return () => {
       socket.off("user:joined", handleUserJoined);
       socket.off("incomming:call", handleIncommingCall);
       socket.off("call:accepted", handleCallAccepted);
-      socket.off("peer:nego:needed", handleNegoNeedIncomming);
-      socket.off("peer:nego:final", handleNegoNeedFinal);
     };
-  }, []);
+  }, [socket, handleUserJoined, handleIncommingCall, handleCallAccepted]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4">
-      <div className="p-6 bg-gray-800 rounded-lg shadow-lg w-80 text-center">
-        <h1 className="text-3xl font-bold mb-4">🔗 Room</h1>
-        <h4 className={`text-lg mb-4 ${remoteSocketId ? "text-green-400" : "text-red-400"}`}>
-          {remoteSocketId ? "✅ Connected" : "❌ No one in room"}
-        </h4>
+    <div className="min-h-screen bg-[#0e1628] flex flex-col items-center px-4 py-6 gap-4">
+      <h1 className="text-4xl font-bold text-white">🔗 Room</h1>
+      <p className="text-green-500 text-xl font-medium">✅ Connected</p>
 
-        {remoteSocketId && (
-          <button
-            onClick={handleCallUser}
-            className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded mb-2"
-          >
-            📞 CALL
-          </button>
-        )}
+      <button
+        onClick={handleCallUser}
+        className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold shadow hover:bg-blue-600 transition"
+      >
+        📞 CALL
+      </button>
 
-        {myStream && (
-          <button
-            onClick={sendStreams}
-            className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded"
-          >
-            🎥 Send Stream
-          </button>
-        )}
-      </div>
+      <div className="flex flex-col md:flex-row gap-4 mt-6 w-full max-w-3xl justify-center items-center">
+        <div className="bg-gray-800 p-4 rounded-xl w-full md:w-1/2 flex flex-col items-center">
+          <h2 className="text-white font-semibold text-lg mb-2">📷 My Stream</h2>
+          <video
+            ref={myVideoRef}
+            autoPlay
+            playsInline
+            muted
+            className="rounded-xl w-full h-64 object-cover"
+          />
+        </div>
 
-      {/* Video Section */}
-      <div className="flex flex-col md:flex-row gap-4 mt-6 items-center md:items-start">
-        {myStream && (
-          <div className="bg-gray-700 p-3 rounded-lg shadow-lg w-[240px] h-[160px] md:w-[300px] md:h-[200px]">
-            <h2 className="text-center mb-2">📷 My Stream</h2>
-            <video
-              ref={myVideoRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-full h-full rounded-md object-cover"
-            />
-          </div>
-        )}
-
-        {remoteStream && (
-          <div className="bg-gray-700 p-3 rounded-lg shadow-lg w-[240px] h-[160px] md:w-[300px] md:h-[200px]">
-            <h2 className="text-center mb-2">🧑‍🤝‍🧑 Remote Stream</h2>
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              muted={false}
-              className="w-full h-full rounded-md object-cover"
-            />
-          </div>
-        )}
+        <div className="bg-gray-800 p-4 rounded-xl w-full md:w-1/2 flex flex-col items-center">
+          <h2 className="text-white font-semibold text-lg mb-2">👬 Remote Stream</h2>
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className="rounded-xl w-full h-64 object-cover"
+          />
+        </div>
       </div>
     </div>
   );
