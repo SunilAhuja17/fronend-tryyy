@@ -1,7 +1,6 @@
-import React, { useEffect, useCallback, useState } from "react";
-import ReactPlayer from "react-player";
-import peer from "../service/peer";
+import React, { useEffect, useCallback, useState, useRef } from "react";
 import { useSocket } from "../context/SocketProvider";
+import peer from "../service/peer";
 
 const RoomPage = () => {
   const socket = useSocket();
@@ -9,8 +8,10 @@ const RoomPage = () => {
   const [myStream, setMyStream] = useState();
   const [remoteStream, setRemoteStream] = useState();
 
+  const myVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+
   const handleUserJoined = useCallback(({ email, id }) => {
-    console.log(`Email ${email} joined room`);
     setRemoteSocketId(id);
   }, []);
 
@@ -19,9 +20,12 @@ const RoomPage = () => {
       audio: true,
       video: true,
     });
+    setMyStream(stream);
+    if (myVideoRef.current) {
+      myVideoRef.current.srcObject = stream;
+    }
     const offer = await peer.getOffer();
     socket.emit("user:call", { to: remoteSocketId, offer });
-    setMyStream(stream);
   }, [remoteSocketId, socket]);
 
   const handleIncommingCall = useCallback(
@@ -32,7 +36,9 @@ const RoomPage = () => {
         video: true,
       });
       setMyStream(stream);
-      console.log(`Incoming Call`, from, offer);
+      if (myVideoRef.current) {
+        myVideoRef.current.srcObject = stream;
+      }
       const ans = await peer.getAnswer(offer);
       socket.emit("call:accepted", { to: from, ans });
     },
@@ -40,15 +46,16 @@ const RoomPage = () => {
   );
 
   const sendStreams = useCallback(() => {
-    for (const track of myStream.getTracks()) {
-      peer.peer.addTrack(track, myStream);
+    if (myStream) {
+      myStream.getTracks().forEach((track) => {
+        peer.peer.addTrack(track, myStream);
+      });
     }
   }, [myStream]);
 
   const handleCallAccepted = useCallback(
     ({ from, ans }) => {
       peer.setLocalDescription(ans);
-      console.log("Call Accepted!");
       sendStreams();
     },
     [sendStreams]
@@ -58,13 +65,6 @@ const RoomPage = () => {
     const offer = await peer.getOffer();
     socket.emit("peer:nego:needed", { offer, to: remoteSocketId });
   }, [remoteSocketId, socket]);
-
-  useEffect(() => {
-    peer.peer.addEventListener("negotiationneeded", handleNegoNeeded);
-    return () => {
-      peer.peer.removeEventListener("negotiationneeded", handleNegoNeeded);
-    };
-  }, [handleNegoNeeded]);
 
   const handleNegoNeedIncomming = useCallback(
     async ({ from, offer }) => {
@@ -80,9 +80,11 @@ const RoomPage = () => {
 
   useEffect(() => {
     peer.peer.addEventListener("track", async (ev) => {
-      const remoteStream = ev.streams;
-      console.log("GOT TRACKS!!");
-      setRemoteStream(remoteStream[0]);
+      const remoteStream = ev.streams[0];
+      setRemoteStream(remoteStream);
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
     });
   }, []);
 
@@ -100,17 +102,10 @@ const RoomPage = () => {
       socket.off("peer:nego:needed", handleNegoNeedIncomming);
       socket.off("peer:nego:final", handleNegoNeedFinal);
     };
-  }, [
-    socket,
-    handleUserJoined,
-    handleIncommingCall,
-    handleCallAccepted,
-    handleNegoNeedIncomming,
-    handleNegoNeedFinal,
-  ]);
+  }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4">
       <div className="p-6 bg-gray-800 rounded-lg shadow-lg w-80 text-center">
         <h1 className="text-3xl font-bold mb-4">🔗 Room</h1>
         <h4 className={`text-lg mb-4 ${remoteSocketId ? "text-green-400" : "text-red-400"}`}>
@@ -120,7 +115,7 @@ const RoomPage = () => {
         {remoteSocketId && (
           <button
             onClick={handleCallUser}
-            className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded transition-all duration-300 mb-2"
+            className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded mb-2"
           >
             📞 CALL
           </button>
@@ -129,7 +124,7 @@ const RoomPage = () => {
         {myStream && (
           <button
             onClick={sendStreams}
-            className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded transition-all duration-300"
+            className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded"
           >
             🎥 Send Stream
           </button>
@@ -137,35 +132,30 @@ const RoomPage = () => {
       </div>
 
       {/* Video Section */}
-      <div className="flex flex-col md:flex-row gap-6 mt-8 items-center md:items-start">
+      <div className="flex flex-col md:flex-row gap-4 mt-6 items-center md:items-start">
         {myStream && (
-          <div className="bg-gray-700 p-4 rounded-lg shadow-lg w-[200px] h-[150px] md:w-[300px] md:h-[200px]">
-            <h2 className="text-lg font-semibold text-center mb-2">📹 My Stream</h2>
-            <div className="w-full h-full overflow-hidden rounded-md">
-              <ReactPlayer
-                playing
-                muted
-                url={myStream}
-                width="100%"
-                height="100%"
-                style={{ objectFit: "cover" }}
-              />
-            </div>
+          <div className="bg-gray-700 p-3 rounded-lg shadow-lg w-[240px] h-[160px] md:w-[300px] md:h-[200px]">
+            <h2 className="text-center mb-2">📷 My Stream</h2>
+            <video
+              ref={myVideoRef}
+              autoPlay
+              muted
+              playsInline
+              className="w-full h-full rounded-md object-cover"
+            />
           </div>
         )}
 
         {remoteStream && (
-          <div className="bg-gray-700 p-4 rounded-lg shadow-lg w-[200px] h-[150px] md:w-[300px] md:h-[200px]">
-            <h2 className="text-lg font-semibold text-center mb-2">🧑‍🤝‍🧑 Remote Stream</h2>
-            <div className="w-full h-full overflow-hidden rounded-md">
-              <ReactPlayer
-                playing
-                url={remoteStream}
-                width="100%"
-                height="100%"
-                style={{ objectFit: "cover" }}
-              />
-            </div>
+          <div className="bg-gray-700 p-3 rounded-lg shadow-lg w-[240px] h-[160px] md:w-[300px] md:h-[200px]">
+            <h2 className="text-center mb-2">🧑‍🤝‍🧑 Remote Stream</h2>
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              muted={false}
+              className="w-full h-full rounded-md object-cover"
+            />
           </div>
         )}
       </div>
