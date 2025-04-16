@@ -6,6 +6,7 @@ const RoomPage = () => {
   const [remoteSocketId, setRemoteSocketId] = useState(null);
   const [myStream, setMyStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
+  const [isCallStarted, setIsCallStarted] = useState(false);
 
   const myVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -36,8 +37,8 @@ const RoomPage = () => {
     return peer;
   };
 
-  const handleUserJoined = useCallback(async ({ id }) => {
-    setRemoteSocketId(id);
+  const startCall = async () => {
+    if (!remoteSocketId || isCallStarted) return;
 
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
@@ -47,15 +48,19 @@ const RoomPage = () => {
     if (myVideoRef.current) myVideoRef.current.srcObject = stream;
 
     const peer = createPeer();
-    stream.getTracks().forEach((track) => {
-      peer.addTrack(track, stream);
-    });
+    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
     peerRef.current = peer;
 
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
-    socket.emit("user:call", { to: id, offer });
-  }, [socket]);
+    socket.emit("user:call", { to: remoteSocketId, offer });
+
+    setIsCallStarted(true);
+  };
+
+  const handleUserJoined = useCallback(({ id }) => {
+    setRemoteSocketId(id);
+  }, []);
 
   const handleIncomingCall = useCallback(async ({ from, offer }) => {
     setRemoteSocketId(from);
@@ -68,9 +73,7 @@ const RoomPage = () => {
     if (myVideoRef.current) myVideoRef.current.srcObject = stream;
 
     const peer = createPeer();
-    stream.getTracks().forEach((track) => {
-      peer.addTrack(track, stream);
-    });
+    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
     peerRef.current = peer;
 
     await peer.setRemoteDescription(new RTCSessionDescription(offer));
@@ -110,6 +113,15 @@ const RoomPage = () => {
     <div className="min-h-screen bg-[#0e1628] flex flex-col items-center px-4 py-6 gap-4">
       <h1 className="text-4xl font-bold text-white">🔗 Room</h1>
       <p className="text-green-500 text-xl font-medium">✅ Connected</p>
+
+      {remoteSocketId && !isCallStarted && (
+        <button
+          onClick={startCall}
+          className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg mt-4"
+        >
+          📞 CALL / SEND STREAM
+        </button>
+      )}
 
       <div className="flex flex-col md:flex-row gap-4 mt-6 w-full max-w-3xl justify-center items-center">
         <div className="bg-gray-800 p-4 rounded-xl w-full md:w-1/2 flex flex-col items-center">
